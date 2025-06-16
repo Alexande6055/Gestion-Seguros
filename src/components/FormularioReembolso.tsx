@@ -21,6 +21,7 @@ import { CalendarIcon, Upload, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { UsuarioLocal } from "@/Model/Usuario";
 
 const formSchema = z.object({
   fechaGasto: z.date({ required_error: "La fecha del gasto es requerida" }).refine((date) => date <= new Date(), {
@@ -50,26 +51,47 @@ const tiposGasto = [
 ];
 
 const FormularioReembolso = () => {
-  const { toast } = useToast();
+  // Estado para el archivo y base64
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfBase64, setPdfBase64] = useState<string>(""); const { toast } = useToast();
   const [archivo, setArchivo] = useState<File | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
   });
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setArchivo(file);
-    }
+  // Convierte archivo a base64
+  const convertirArchivoABase64 = (file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
   };
 
+  // Maneja selección del archivo
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === "application/pdf") {
+      setPdfFile(file);
+      const base64 = await convertirArchivoABase64(file);
+      setPdfBase64(base64);
+    } else {
+      alert("Por favor, selecciona un archivo PDF válido");
+      setPdfFile(null);
+      setPdfBase64("");
+    }
+  };
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     const formData = new FormData();
 
     // ⚠️ Cambiar por el contrato real del usuario logueado
+    const usuario: UsuarioLocal = JSON.parse(localStorage.getItem("usuario") || "{}");
+    const id = usuario.id_usuario;
+
     formData.append("id_usuario_seguro_per", "1");
-    formData.append("fechaGasto", values.fechaGasto.toISOString().split("T")[0]);
+    formData.append("fecha_gasto", values.fechaGasto.toISOString().split("T")[0]);
     formData.append("tipoGasto", values.tipoGasto);
     formData.append("monto", values.monto);
     formData.append("descripcion", values.descripcion || "");
@@ -78,9 +100,18 @@ const FormularioReembolso = () => {
     }
 
     try {
-      const res = await fetch("http://localhost:8000/api/reembolsos", {
+      const res = await fetch(`http://localhost:8000/reembolsos/${id}`, {
         method: "POST",
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          fecha_gasto: values.fechaGasto.toISOString().split("T")[0],
+          tipo_gasto: values.tipoGasto,
+          monto: values.monto,
+          descripcion: values.descripcion,
+          comprobante: pdfBase64
+        }),
       });
 
       if (res.ok) {

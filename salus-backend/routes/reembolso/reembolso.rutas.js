@@ -60,4 +60,27 @@ router.get("/:id_usuario", (req, res) => {
   });
 });
 
+
+router.post("/:id", (req, res) => {
+  const { id } = req.params;
+  const { fecha_gasto, tipo_gasto, monto, comprobante, descripcion } = req.body;
+  if (!fecha_gasto || !tipo_gasto || !monto || !comprobante || !descripcion) {
+    return res.status(400).send('Todos los campos son obligatorios');
+  }
+
+  const sql = `
+  INSERT INTO reembolso (fecha_gasto, tipo_gasto, monto_solicitado, comprobante, descripcion,id_usuario)
+  VALUES (?, ?, ?, ?, ?, ?)
+`;
+
+  db.query(sql, [fecha_gasto, tipo_gasto, monto, comprobante, descripcion, id], (err, result) => {
+
+    if (err) {
+      console.log(err);
+      return res.status(500).send('Error al crear reembolso');
+    }
+    res.status(201).json({ id: result.insertId });
+  });
+})
+
 module.exports = router;

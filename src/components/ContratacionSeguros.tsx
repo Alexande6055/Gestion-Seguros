@@ -1,25 +1,25 @@
 // Importaciones necesarias al inicio del archivo
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { FileText } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
+import { ListaSeguros } from "@/Model/Seguro";
+import SegurosApi from "@/service/Seguros";
+import { generarCaratulaPDF } from "./PDF";
 
 type FormData = {
-  nombres: string;
-  apellidos: string;
+  nombre: string;
+  apellido: string;
   cedula: string;
-  email: string;
+  correo: string;
   telefono: string;
   direccion: string;
   ciudad?: string;
-  fechaContratacion?: string;
+  fechaFinalizacion?: string;
   tipoSeguro: string;
   coberturaAdicional: string;
   observaciones: string;
@@ -36,14 +36,14 @@ type Beneficiario = {
 
 const ContratacionSeguros = () => {
   const [formData, setFormData] = useState<FormData>({
-    nombres: '',
-    apellidos: '',
+    nombre: '',
+    apellido: '',
     cedula: '',
-    email: '',
+    correo: '',
     telefono: '',
     direccion: '',
     ciudad: '',
-    fechaContratacion: '',
+    fechaFinalizacion: '',
     tipoSeguro: '',
     coberturaAdicional: '',
     observaciones: '',
@@ -59,6 +59,15 @@ const ContratacionSeguros = () => {
   });
 
   const [documentosPersonales, setDocumentosPersonales] = useState<File[]>([]);
+  const [tipoSeguro, setTipoSeguro] = useState<ListaSeguros[]>([]);
+  useEffect(() => {
+    const fetchSeguros = async () => {
+      const response = await SegurosApi.obtenerListaSeguros();
+      setTipoSeguro(response);
+    };
+    fetchSeguros();
+  }, []);
+
   const { toast } = useToast();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,20 +87,19 @@ const ContratacionSeguros = () => {
   };
 
   const handleDocumentoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const archivos = Array.from(e.target.files || []);
-  const archivosValidos = archivos.filter(archivo =>
-    ["application/pdf", "image/jpeg", "image/png"].includes(archivo.type)
-  );
+    const archivos = Array.from(e.target.files || []);
+    const archivosValidos = archivos.filter(archivo => archivo.type === "application/pdf");
+    if (archivosValidos.length !== archivos.length) {
+      toast({
+        title: "Archivo inválido",
+        description: "Algunos archivos no son PDF ",
+        variant: "destructive",
+      });
+    }
 
-  if (archivosValidos.length !== archivos.length) {
-    toast({
-      title: "Archivo inválido",
-      description: "Algunos archivos no son PDF o imágenes JPG/PNG",
-      variant: "destructive",
-    });
-  }
+    setDocumentosPersonales(prev => [...prev, ...archivosValidos]);
 
-  setDocumentosPersonales(prev => [...prev, ...archivosValidos]);
+
   };
 
 
@@ -99,18 +107,10 @@ const ContratacionSeguros = () => {
     setFormData(prev => ({ ...prev, tipoSeguro: value }));
   };
 
-  const handleCoberturaAdicionalChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setFormData(prev => ({ ...prev, coberturaAdicional: e.target.value }));
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); // 🔥 PREVIENE EL REFRESCO DE LA PÁGINA
 
-  const handleObservacionesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setFormData(prev => ({ ...prev, observaciones: e.target.value }));
-  };
-
-  const handleSubmit = (e: React.Event) => {
-    e.preventDefault();
-
-    if (!formData.nombres || !formData.apellidos || !formData.cedula || !formData.email || !formData.telefono || !formData.tipoSeguro) {
+    if (!formData.nombre || !formData.apellido || !formData.cedula || !formData.correo || !formData.telefono || !formData.tipoSeguro) {
       toast({
         title: "Error",
         description: "Todos los campos son obligatorios",
@@ -131,79 +131,73 @@ const ContratacionSeguros = () => {
       }
     }
 
-    toast({
-      title: "Contratación exitosa",
-      description: "La contratación del seguro se ha registrado correctamente",
-    });
+    const seguroSeleccionado = tipoSeguro.find(s => s.nombre === formData.tipoSeguro);
+    const idSeguro = seguroSeleccionado ? seguroSeleccionado.id_seguro : null;
+    if (idSeguro) {
+      const toBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
 
-    console.log("Datos enviados:", formData, beneficiario, documentosPersonales);
-
-    setFormData({
-      nombres: '',
-      apellidos: '',
-      cedula: '',
-      email: '',
-      telefono: '',
-      direccion: '',
-      ciudad: '',
-      fechaContratacion: '',
-      tipoSeguro: '',
-      coberturaAdicional: '',
-      observaciones: '',
-    });
-
-    setBeneficiario({
-      nombre: '',
-      apellido: '',
-      cedula: '',
-      fecha_nacimiento: '',
-      parentesco: '',
-      telefono: '',
-    });
-
-    setDocumentosPersonales([]); // Limpiar archivos adjuntos
-  };
-
-  const generarContratoPDF = () => {
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text("Contrato de Seguro", 105, 15, { align: "center" });
-
-    const body: any[][] = [
-      ["Nombres", formData.nombres],
-      ["Apellidos", formData.apellidos],
-      ["Cédula", formData.cedula],
-      ["Email", formData.email],
-      ["Teléfono", formData.telefono],
-      ["Dirección", formData.direccion],
-      ["Ciudad", formData.ciudad || "N/A"],
-      ["Fecha de Contratación", formData.fechaContratacion || "N/A"],
-      ["Tipo de Seguro", formData.tipoSeguro],
-      ["Cobertura Adicional", formData.coberturaAdicional],
-      ["Observaciones", formData.observaciones],
-      ["Documentos Personales", documentosPersonales.length > 0 ? `${documentosPersonales.length} archivos adjuntos` : "No adjuntos"],
-    ];
-
-    if (formData.tipoSeguro === "Vida") {
-      body.push(
-        ["--- Beneficiario ---", ""],
-        ["Nombre", beneficiario.nombre],
-        ["Apellido", beneficiario.apellido],
-        ["Cédula", beneficiario.cedula],
-        ["Fecha de Nacimiento", beneficiario.fecha_nacimiento],
-        ["Parentesco", beneficiario.parentesco],
-        ["Teléfono", beneficiario.telefono]
+      const documentos = await Promise.all(
+        documentosPersonales.map(file => toBase64(file))
       );
+      const pdfBlob = generarCaratulaPDF();
+      const pdfFile = new File([pdfBlob], "Caratula_Poliza_Seguro.pdf", { type: "application/pdf" });
+      const data = await SegurosApi.crearContratoSeguro({
+        id_usuario: {
+          apellido: formData.apellido,
+          cedula: formData.cedula,
+          correo: formData.correo,
+          nombre: formData.nombre,
+          password: formData.cedula,
+          telefono: formData.telefono,
+          tipo: "1",
+          username: formData.nombre + " " + formData.apellido
+        },
+        id_seguro: seguroSeleccionado ? seguroSeleccionado.id_seguro : null,
+        fechaContrato: (new Date()).toISOString(),
+        fechaFin: formData.fechaFinalizacion,
+        documento: documentos
+      }, pdfFile);
+      console.log(data)
+      toast({
+        title: "Contratación exitosa",
+        description: "La contratación del seguro se ha registrado correctamente",
+      });
+
+
+      setFormData({
+        nombre: '',
+        apellido: '',
+        cedula: '',
+        correo: '',
+        telefono: '',
+        direccion: '',
+        ciudad: '',
+        fechaFinalizacion: '',
+        tipoSeguro: '',
+        coberturaAdicional: '',
+        observaciones: '',
+      });
+
+      setBeneficiario({
+        nombre: '',
+        apellido: '',
+        cedula: '',
+        fecha_nacimiento: '',
+        parentesco: '',
+        telefono: '',
+      });
+
+      setDocumentosPersonales([]); // Limpiar archivos adjuntos
     }
 
-    autoTable(doc, {
-      startY: 25,
-      head: [["Campo", "Valor"]],
-      body,
-    });
-
-    doc.save(`Contrato_${formData.apellidos}_${formData.cedula}.pdf`);
   };
+
 
   return (
     <div className="p-6">
@@ -223,20 +217,20 @@ const ContratacionSeguros = () => {
             {/* Formulario principal */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="nombres">Nombres</Label>
-                <Input id="nombres" name="nombres" value={formData.nombres} onChange={handleInputChange} required />
+                <Label htmlFor="nombre">Nombres</Label>
+                <Input id="nombre" name="nombre" value={formData.nombre} onChange={handleInputChange} required />
               </div>
               <div>
-                <Label htmlFor="apellidos">Apellidos</Label>
-                <Input id="apellidos" name="apellidos" value={formData.apellidos} onChange={handleInputChange} required />
+                <Label htmlFor="apellido">Apellidos</Label>
+                <Input id="apellido" name="apellido" value={formData.apellido} onChange={handleInputChange} required />
               </div>
               <div>
                 <Label htmlFor="cedula">Cédula</Label>
                 <Input id="cedula" name="cedula" value={formData.cedula} onChange={handleInputChange} required />
               </div>
               <div>
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" value={formData.email} onChange={handleInputChange} required />
+                <Label htmlFor="correo">Email</Label>
+                <Input id="correo" name="correo" type="email" value={formData.correo} onChange={handleInputChange} required />
               </div>
               <div>
                 <Label htmlFor="telefono">Teléfono</Label>
@@ -251,8 +245,8 @@ const ContratacionSeguros = () => {
                 <Input id="ciudad" name="ciudad" value={formData.ciudad} onChange={handleInputChange} />
               </div>
               <div>
-                <Label htmlFor="fechaContratacion">Fecha de Contratación</Label>
-                <Input id="fechaContratacion" name="fechaContratacion" type="date" value={formData.fechaContratacion} onChange={handleInputChange} />
+                <Label htmlFor="fechaFinalizacion">Fecha de Finalizacion</Label>
+                <Input id="fechaFinalizacion" name="fechaFinalizacion" type="date" value={formData.fechaFinalizacion} onChange={handleInputChange} />
               </div>
             </div>
 
@@ -261,8 +255,13 @@ const ContratacionSeguros = () => {
               <Select value={formData.tipoSeguro} onValueChange={handleTipoSeguroChange}>
                 <SelectTrigger><SelectValue placeholder="Seleccione tipo" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Vida">Vida</SelectItem>
-                  <SelectItem value="Salud">Salud</SelectItem>
+                  {tipoSeguro.length > 0 &&
+                    tipoSeguro.map((seguro) => (
+                      <SelectItem key={seguro.id_seguro} value={seguro.nombre}>
+                        {seguro.nombre}
+                      </SelectItem>
+                    ))
+                  }
                 </SelectContent>
               </Select>
             </div>
@@ -301,20 +300,10 @@ const ContratacionSeguros = () => {
             )}
 
             <div>
-              <Label htmlFor="coberturaAdicional">Cobertura Adicional</Label>
-              <Textarea id="coberturaAdicional" name="coberturaAdicional" value={formData.coberturaAdicional} onChange={handleCoberturaAdicionalChange} />
-            </div>
-
-            <div>
-              <Label htmlFor="observaciones">Observaciones</Label>
-              <Textarea id="observaciones" name="observaciones" value={formData.observaciones} onChange={handleObservacionesChange} />
-            </div>
-
-            <div>
-              <Label>Documentos de Información Personal (PDF/JPG/PNG)</Label>
+              <Label>Documentos de Información Personal (PDF)</Label>
               <Input
                 type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
+                accept=".pdf"
                 multiple
                 onChange={handleDocumentoChange}
               />
@@ -330,7 +319,6 @@ const ContratacionSeguros = () => {
 
             <div className="flex gap-4">
               <Button type="submit" className="bg-salus-blue hover:bg-salus-blue/90">Contratar Seguro</Button>
-              <Button type="button" onClick={generarContratoPDF} className="bg-green-600 hover:bg-green-700">Descargar Contrato PDF</Button>
             </div>
           </form>
         </CardContent>

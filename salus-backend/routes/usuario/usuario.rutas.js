@@ -18,7 +18,7 @@ router.post('/', async (req, res) => {
   const { nombre, apellido, correo, username, password, tipo, cedula, telefono } = req.body;
 
   try {
-    const hashedPassword = await bcrypt.hash(password, 10); // 🔐 Encriptar contraseña
+    const hashedPassword = await bcrypt.hash(password, 10); 
 
     const sql = 'INSERT INTO usuario (nombre, apellido, correo, username, password, tipo, activo, cedula, telefono) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)';
     const values = [nombre, apellido, correo, username, hashedPassword, tipo, cedula, telefono];

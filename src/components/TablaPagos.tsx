@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,65 +9,92 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { FileText, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
-interface Pago {
-  id: string;
-  idUsuario: string;
-  fechaPago: string;
-  monto: number;
-  estado: 'pagado';
-  comprobante: string;
-}
-
-const pagosMockData: Pago[] = [
-  {
-    id: "PAG001",
-    idUsuario: "USR001",
-    fechaPago: "2024-01-15",
-    monto: 69.00,
-    estado: 'pagado',
-    comprobante: 'comprobante_pag001.pdf'
-  },
-  {
-    id: "PAG002", 
-    idUsuario: "USR001",
-    fechaPago: "2024-02-15",
-    monto: 120.00,
-    estado: 'pagado',
-    comprobante: 'comprobante_pag002.pdf'
-  },
-  {
-    id: "PAG003",
-    idUsuario: "USR001", 
-    fechaPago: "2024-03-15",
-    monto: 69.00,
-    estado: 'pagado',
-    comprobante: 'comprobante_pag003.pdf'
-  }
-];
+import { PagosSegurosUsuario, SegurosUsuario } from "@/Model/Seguro";
+import SegurosApi from "@/service/Seguros";
 
 const TablaPagos = () => {
-  const [pagos] = useState<Pago[]>(pagosMockData);
+
+  const [seguros, setSeguros] = useState<SegurosUsuario[]>([]);
+
+  // Estado para el archivo y base64
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfBase64, setPdfBase64] = useState<string>("");
+  const [pagosUsuario, SetPagosUsuario] = useState<PagosSegurosUsuario[]>([]);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     monto: '',
     fechaPago: '',
-    comprobante: null as File | null
+    comprobante: null as File | null,
+    seguroSeleccionado: ''
   });
   const { toast } = useToast();
+  // Convierte archivo a base64
+  const convertirArchivoABase64 = (file: File) => {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Maneja selección del archivo
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type === "application/pdf") {
+      setPdfFile(file);
+      const base64 = await convertirArchivoABase64(file);
+      setPdfBase64(base64);
+      setFormData(prev => ({ ...prev, comprobante: file }));
+    } else {
+      alert("Por favor, selecciona un archivo PDF válido");
+      setPdfFile(null);
+      setPdfBase64("");
+      setFormData(prev => ({ ...prev, comprobante: null }));
+    }
+  };
+
+  // Función para enviar el base64 al backend
+  const enviarComprobante = async () => {
+    if (!pdfBase64) {
+      alert("Selecciona un PDF primero");
+      return;
+    }
+
+    const response = await SegurosApi.enviarPagoSeguro({
+      comprobanteBase64: pdfBase64,
+      fecha: new Date(formData.fechaPago),
+      monto: parseFloat(formData.monto),
+    }, formData.seguroSeleccionado);
+
+    if (!response.ok) throw new Error("Error al subir el comprobante");
+
+    alert("Comprobante subido correctamente");
+    setPdfFile(null);
+    setPdfBase64("");
+  }
+
+
+  useEffect(() => {
+    const fetchPagos = async () => {
+      const pagoss: PagosSegurosUsuario[] = await SegurosApi.getPagosSeguros();
+      console.log(pagoss);
+      SetPagosUsuario(pagoss);
+      const data = await SegurosApi.getSeguros();
+      setSeguros(data)
+    };
+    fetchPagos();
+  }, []);
+
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setFormData(prev => ({ ...prev, comprobante: file }));
-  };
 
   const handleSubmitPayment = () => {
-    if (!formData.monto || !formData.fechaPago || !formData.comprobante) {
+    if (!formData.monto || !formData.fechaPago || !formData.comprobante || !formData.seguroSeleccionado) {
       toast({
         title: "Error",
         description: "Todos los campos son obligatorios",
@@ -75,6 +102,7 @@ const TablaPagos = () => {
       });
       return;
     }
+    enviarComprobante()
 
     // Validar monto
     const monto = parseFloat(formData.monto);
@@ -109,10 +137,32 @@ const TablaPagos = () => {
     setFormData({
       monto: '',
       fechaPago: '',
-      comprobante: null
+      comprobante: null,
+      seguroSeleccionado: ''
     });
     setIsPaymentDialogOpen(false);
   };
+
+
+  const abrirPDF = (dataUrl) => {
+    // Convertir dataURL a Blob
+    const byteString = atob(dataUrl.split(',')[1]);
+    const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+
+    const ab = new ArrayBuffer(byteString.length);
+    const ia = new Uint8Array(ab);
+    for (let i = 0; i < byteString.length; i++) {
+      ia[i] = byteString.charCodeAt(i);
+    }
+
+    const blob = new Blob([ab], { type: mimeString });
+    const blobUrl = URL.createObjectURL(blob);
+
+    // Abrir PDF en nueva pestaña
+    window.open(blobUrl, '_blank');
+  };
+
+
 
   return (
     <div className="space-y-6">
@@ -150,7 +200,7 @@ const TablaPagos = () => {
                   $69 para Seguro de Salud, $120 para Seguro de Vida
                 </p>
               </div>
-              
+
               <div>
                 <Label htmlFor="fechaPago">Fecha de Pago</Label>
                 <Input
@@ -162,7 +212,7 @@ const TablaPagos = () => {
                   max={new Date().toISOString().split('T')[0]}
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="comprobante">Comprobante</Label>
                 <Input
@@ -173,9 +223,28 @@ const TablaPagos = () => {
                   className="cursor-pointer"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Formatos aceptados: PDF, JPG, PNG
+                  Formatos aceptados: PDF
                 </p>
               </div>
+
+              <div>
+                <Label htmlFor="seguroSeleccionado">Seguro</Label>
+                <select
+                  id="seguroSeleccionado"
+                  name="seguroSeleccionado"
+                  value={formData.seguroSeleccionado}
+                  onChange={handleInputChange}
+                  className="w-full border rounded px-3 py-2 mt-1"
+                >
+                  <option value="">Seleccione un seguro</option>
+                  {seguros.map(seguro => (
+                    <option key={seguro.id_seguro} value={seguro.id_seguro}>
+                      {seguro.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsPaymentDialogOpen(false)}>
@@ -210,25 +279,48 @@ const TablaPagos = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pagos.map((pago) => (
+                {pagosUsuario.map((pago) => (
                   <TableRow key={pago.id}>
-                    <TableCell className="font-medium">{pago.id}</TableCell>
-                    <TableCell>{pago.idUsuario}</TableCell>
-                    <TableCell>{pago.fechaPago}</TableCell>
-                    <TableCell>${pago.monto.toFixed(2)}</TableCell>
+                    <TableCell className="font-medium">PAG00{pago.id}</TableCell>
+                    <TableCell>SEG00{pago.id_seguro}</TableCell>
+                    <TableCell>{new Date(pago.fecha_pago).toISOString().slice(0, 10)}</TableCell>
+                    <TableCell>${pago.cantidad.toFixed(2)}</TableCell>
                     <TableCell>
                       <Badge variant="default">
                         Pagado
                       </Badge>
                     </TableCell>
+
                     <TableCell>
-                      <div className="flex items-center">
-                        <FileText className="h-4 w-4 text-green-500 mr-2" />
-                        <span className="text-sm text-green-600">
-                          {pago.comprobante}
-                        </span>
-                      </div>
+                      {pago.comprobante_pago ? (
+                        <div className="flex items-center space-x-3">
+                          <FileText className="h-4 w-4 text-green-500" />
+
+                          {/* Ver PDF en nueva pestaña */}
+
+                          <button
+                            onClick={() => abrirPDF(pago.comprobante_pago)}
+                            className="text-blue-600 hover:underline text-sm"
+                            title="Ver PDF"
+                          >
+                            Ver
+                          </button>
+
+                          {/* Descargar PDF */}
+                          <a
+                            href={`${pago.comprobante_pago}`}
+                            download={`comprobante_pago_${pago.id}.pdf`}
+                            className="text-sm text-gray-600 hover:text-black"
+                            title="Descargar PDF"
+                          >
+                            Descargar
+                          </a>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">Sin comprobante</span>
+                      )}
                     </TableCell>
+
                   </TableRow>
                 ))}
               </TableBody>

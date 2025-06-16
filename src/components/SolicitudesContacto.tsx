@@ -3,27 +3,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useSolicitudes } from "@/context/SolicitudesContext";
+import { SolicitudAsesor, useSolicitudes } from "@/context/SolicitudesContext";
 import { Mail, Phone, Calendar, MessageCircle, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import Solicitudes from "@/service/Solicitudes";
+import { SolicitudesUsuario } from "@/Model/Solicitud";
 
 const SolicitudesContacto = () => {
   const { solicitudes, eliminarSolicitud } = useSolicitudes();
+  const [solicitud, setSolicitud] = useState<SolicitudesUsuario[]>([]);
 
-  const handleEliminar = (id: string) => {
-    eliminarSolicitud(id);
+  const handleEliminar = (id: number) => {
+    eliminarSolicitud(id.toString());
+  };
+  const handleCargarSolicitudes = async () => {
+    const solicitudesApi: SolicitudesUsuario[] = await Solicitudes.obtenerSolicitudes();
+    setSolicitud(solicitudesApi);
   };
 
-  const getEstadoBadge = (estado: string) => {
-    return estado === 'revisado' ? (
-      <Badge variant="default" className="bg-green-100 text-green-800">
-        Revisado
-      </Badge>
-    ) : (
-      <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-        Pendiente
-      </Badge>
-    );
-  };
+  useEffect(() => {
+    handleCargarSolicitudes();
+  }, []);
+
 
   return (
     <div className="space-y-6">
@@ -33,7 +34,6 @@ const SolicitudesContacto = () => {
           <p className="text-gray-600">Gestión de solicitudes de asesoría recibidas</p>
         </div>
       </div>
-
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -41,7 +41,7 @@ const SolicitudesContacto = () => {
             <CardTitle className="text-sm font-medium text-gray-600">Total Solicitudes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-salus-blue">{solicitudes.length}</div>
+            <div className="text-2xl font-bold text-salus-blue">{solicitud.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -50,7 +50,7 @@ const SolicitudesContacto = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">
-              {solicitudes.filter(s => !s.id.includes('rev')).length}
+              {solicitud.filter(s => !s.estado.includes('Contactado')).length}
             </div>
           </CardContent>
         </Card>
@@ -60,7 +60,7 @@ const SolicitudesContacto = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {solicitudes.filter(s => s.id.includes('rev')).length}
+              {solicitud.filter(s => s.estado.includes('Asesorado')).length}
             </div>
           </CardContent>
         </Card>
@@ -77,7 +77,7 @@ const SolicitudesContacto = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {solicitudes.length === 0 ? (
+          {solicitud.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               No hay solicitudes registradas
             </div>
@@ -96,7 +96,7 @@ const SolicitudesContacto = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {solicitudes.map((solicitud) => (
+                  {solicitud.map((solicitud) => (
                     <TableRow key={solicitud.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -105,7 +105,7 @@ const SolicitudesContacto = () => {
                         </div>
                       </TableCell>
                       <TableCell className="font-medium">
-                        {solicitud.nombres} {solicitud.apellidos}
+                        {solicitud.nombre} {solicitud.apellido}
                       </TableCell>
                       <TableCell>{solicitud.cedula}</TableCell>
                       <TableCell>
@@ -126,7 +126,7 @@ const SolicitudesContacto = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {getEstadoBadge(solicitud.id.includes('rev') ? 'revisado' : 'pendiente')}
+                        {solicitud.estado}
                       </TableCell>
                       <TableCell>
                         <Button

@@ -50,12 +50,12 @@ router.post('/', (req, res) => {
     return res.status(400).send('Todos los campos son obligatorios');
   }
 
-const sql = `
+  const sql = `
   INSERT INTO seguro (nombre, precio, tiempo_pago, tipo, cobertura, descripcion, num_beneficiarios, estado)
   VALUES (?, ?, ?, ?, ?, ?, ?, 1)
 `;
 
-db.query(sql, [nombre, precio, tiempo_pago, tipo, cobertura, descripcion, num_beneficiarios], (err, result) => {
+  db.query(sql, [nombre, precio, tiempo_pago, tipo, cobertura, descripcion, num_beneficiarios], (err, result) => {
 
     if (err) return res.status(500).send('Error al crear seguro');
     res.status(201).json({ id: result.insertId });
@@ -168,6 +168,100 @@ router.post('/coberturas', (req, res) => {
       res.sendStatus(200);
     });
   });
+});
+
+//optener seguros del usuario
+router.get('/usuario/:id', (req, res) => {
+  const { id } = req.params;
+  const sql = `
+    select
+      us.id_usuario_seguro as id_seguro,
+      s.nombre,
+      s.descripcion,
+      us.estado,
+      s.cobertura,
+      us.fecha_contrato
+    from
+      seguro s
+    inner join usuario_seguro us on
+      s.id_seguro = us.id_seguro_per
+    inner join usuario u on
+      u.id_usuario = us.id_usuario_per
+    where
+      u.id_usuario =?`;
+
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      return res.status(500).send('Error al obtener los seguros');
+    }
+    res.json(results);
+  });
+});
+
+//optener seguros del usuario
+router.get('/pago/usuario/:id', (req, res) => {
+  const { id } = req.params;
+  const sql = `
+    select
+      ps.id_pago_seguro as id,
+      us.id_seguro_per as id_seguro,
+      ps.fecha_pago,
+      ps.cantidad,
+      ps.comprobante_pago
+    from
+      pago_seguro ps
+    inner join usuario_seguro us on
+      us.id_usuario_seguro = ps.id_usuario_seguro_per
+    inner join usuario u on
+      u.id_usuario = us.id_usuario_per
+    where
+      u.id_usuario =?`;
+
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      return res.status(500).send('Error al obtener los seguros');
+    }
+    res.json(results);
+  });
+});
+
+// Subir seguros del usuario
+router.post('/pago/usuario/:id', (req, res) => {
+  const { id } = req.params;
+  const { comprobante_pago } = req.body;
+  const { fecha_pago } = req.body;
+  const { cantidad } = req.body;
+  if (!comprobante_pago) {
+    return res.status(400).json({ error: 'Falta comprobante_pago' });
+  }
+
+  const sql = `
+    INSERT INTO pago_seguro (id_usuario_seguro_per, fecha_pago, cantidad, comprobante_pago)
+    VALUES (?, ?, ?, ?);`;
+
+  db.query(sql, [id, fecha_pago, cantidad, comprobante_pago], (err, results) => {
+    if (err) {
+      console.error('Error al insertar pago:', err);
+      return res.status(500).send('Error al insertar pago');
+    }
+    res.json({ message: 'Pago registrado correctamente', data: results });
+  });
+});
+
+
+//obtener los tipos de seguro en la base de datos
+router.get('/obtenerSeguros', (req, res) => {
+  const sql = `
+      SELECT id_seguro,nombre FROM seguro;
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).send('Error al obtener seguros')
+    }
+    res.json(results);
+  });
+
 });
 
 module.exports = router;

@@ -5,12 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Shield, Eye, EyeOff } from "lucide-react";
+import { UsuarioLocal } from "@/Model/Usuario";
 
 // ✅ Tipo personalizado para la respuesta del backend
 type LoginResponse = {
-  usuario: {
-    tipo: number;
-  };
+  usuario: any;
   token: string;
   mensaje: string;
 };
@@ -47,6 +46,16 @@ const LoginPage = () => {
 
       // Guarda el token para futuras peticiones protegidas
       localStorage.setItem("token", token);
+      const dataUser: UsuarioLocal = {
+        nombre: usuario.nombre,
+        apellido: usuario.apellido,
+        cedula: usuario.cedula,
+        correo: usuario.correo,
+        id_usuario: usuario.id_usuario,
+        username: usuario.username,
+        rol: usuario.tipo == 0 ? "ADMINISTRADOR" : usuario.tipo == 1 ? "CLIENTE" : "AGENTE"
+      };
+      localStorage.setItem("usuario", JSON.stringify(dataUser));
 
       alert(mensaje);
 
@@ -76,9 +85,9 @@ const LoginPage = () => {
           {/* Logo y encabezado */}
           <div className="text-center mb-8">
             <div className="flex justify-center items-center space-x-3 mb-4">
-              <img 
-                src="/lovable-uploads/84d5c2fc-1a5b-4438-b68e-c9b2f0c8c75b.png" 
-                alt="SALUS ASEGURADORA" 
+              <img
+                src="/lovable-uploads/84d5c2fc-1a5b-4438-b68e-c9b2f0c8c75b.png"
+                alt="SALUS ASEGURADORA"
                 className="h-16 w-auto"
               />
               <Shield className="h-8 w-8 text-salus-blue" />

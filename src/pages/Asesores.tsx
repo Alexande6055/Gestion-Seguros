@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSolicitudes } from "@/context/SolicitudesContext";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import Solicitudes from "@/service/Solicitudes";
 
 const formSchema = z.object({
   nombres: z.string().min(2, "Los nombres deben tener al menos 2 caracteres"),
@@ -48,19 +49,25 @@ const Asesores = () => {
       email: values.email,
       mensaje: values.mensaje,
     };
-    
+
     agregarSolicitud(solicitudData);
+    Solicitudes.createSolicitud({
+      ...solicitudData,
+      nombre: solicitudData.nombres,
+      apellido:solicitudData.apellidos
+    });
     toast({
       title: "Solicitud enviada",
       description: "Su solicitud ha sido registrada exitosamente.",
     });
+
     form.reset();
   };
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
           <div className="text-center mb-8">
@@ -129,9 +136,9 @@ const Asesores = () => {
                       <FormItem>
                         <FormLabel>Teléfono</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="Ej: 0987654321" 
-                            {...field} 
+                          <Input
+                            placeholder="Ej: 0987654321"
+                            {...field}
                             maxLength={10}
                           />
                         </FormControl>
@@ -161,9 +168,9 @@ const Asesores = () => {
                       <FormItem>
                         <FormLabel>Mensaje</FormLabel>
                         <FormControl>
-                          <Textarea 
-                            placeholder="Describa el tipo de asesoría que necesita" 
-                            {...field} 
+                          <Textarea
+                            placeholder="Describa el tipo de asesoría que necesita"
+                            {...field}
                           />
                         </FormControl>
                         <FormMessage />
