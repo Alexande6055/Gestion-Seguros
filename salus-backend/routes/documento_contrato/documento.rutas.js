@@ -20,11 +20,10 @@ router.post('/', async (req, res) => {
 
     const query = `
         INSERT INTO sistema.documento_contrato (
-            id,
             id_contrato,
             documento,
             tipo_documento
-        ) VALUES (0, ?, ?, ?);
+        ) VALUES ( ?, ?, ?);
     `;
 
     db.query(query, [idContrato, documento, tipoDocumento], (error, results) => {
@@ -49,7 +48,6 @@ router.post('/', async (req, res) => {
 });
 
 router.post("/enviar-pdf", upload.single("file"), async (req, res) => {
-    console.log("ingresa")
     try {
         const file = req.file;
         const { id, nombre, email } = req.body;
@@ -116,6 +114,20 @@ router.post("/enviar-pdf", upload.single("file"), async (req, res) => {
                     content: claveBuffer,
                 },
             ],
+        });
+        const query = `
+        INSERT INTO sistema.firma_electronica (
+            id_usuario,
+            clave,
+            estado
+        ) VALUES ( ?, ?, ?);
+    `;
+
+        db.query(query, [id, passwordHash, "ACTIVADA"], (error, results) => {
+            if (error) {
+                console.error('Error en la consulta SQL:', error);
+                return res.status(500).json({ error: 'Error al insertar LA CLAVE.' });
+            }
         });
 
         res.json({ success: true, messageId: info.messageId });
